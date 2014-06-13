@@ -2,19 +2,213 @@
 
 
 ## Loading and preprocessing the data
+Data is loaded using data.table package (it assumes it is already installed).
+I chose working with data.table because I find it quiet useful for subsetting and merging.
+I would also like to practice its syntax ( a bit different from that use to work with data.frames)
 
+Target file (`activity.csv`) must be in the working directory.
 
+ 
+```{r load data}
+library(data.table)
+data <- fread(input = "activity.csv")
+```
+
+I check column classes
+```{r}
+sapply(data[1,], class)
+```
+
+I convert `date` column to date class:
+```{r}
+data[,date:= as.Date(date)]
+```
 
 ## What is mean total number of steps taken per day?
 
+* **Make a histogram of the total number of steps taken each day**  
 
+Sum of steps are subset by `date` and storaged in an object called `daily.steps`  
+```{r daily.steps}
+setkey(data, date)
+daily.steps <- data[,list( steps = sum(steps, na.rm = TRUE) ), by = date]
+```  
+Here follows first 5 rows of `daily.steps`:  
+```{r}
+daily.steps[1:5]
+```  
+And here is the histogram:  
+```{r daily.steps histogram}
+with(daily.steps, 
+     plot(steps ~ date, type = "h", 
+          xlab = "date", ylab = "steps",
+          main = "Total number of steps taken each day")
+)
+```
+
+* **Calculate and report the mean and median total number of steps taken per day**  
+
+Here is the code:
+```{r daily.steps mean and median}
+daily.mean <- daily.steps[,mean(steps)]
+daily.median <- daily.steps[,median(steps)]
+```
+And here come the values:
+```{r}
+daily.mean
+daily.median
+```
 
 ## What is the average daily activity pattern?
 
+* **Make a time series plot  (i.e. `type = "l"`) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)**
 
+A new subset of `data` is done (by `interval`) and storaged in and object called **interval.steps**  
+```{r interval.steps}
+setkey(data, interval)
+interval.steps <- data[,list(meanSteps = mean(steps, na.rm = TRUE)), by= interval]
+interval.steps
+```
+And here is the plot:  
+```{r interval.steps plot}
+with(interval.steps,
+     plot(meanSteps ~ interval, type = "l",
+          xlab = "interval", ylab = "steps",
+          main = "Average number of steps taken per interval"
+          )
+     )
+```
 
+From time to time I would not mind to be in Baltimore, where days have 2400 minutes ;)  
+(I guess one hour have 100 minutes, that matches)
+
+* **Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?**
+
+I guess there is a prettier way of coding this, but here it goes:
+```{r interval.max}
+max.index <- which(interval.steps$meanSteps == max(interval.steps$meanSteps))
+interval.max <- interval.steps$interval[max.index]
+
+```
+And our 5-minute interval is:
+```{r}
+interval.max
+```
+What matches the previous graph.  
+Just for check:
+```{r}
+interval.steps[max.index]
+```
 ## Imputing missing values
 
+* **Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with `NA`s)**
+```{r}
+missing <- sum(is.na(data$steps))
+missing
+```
 
+* **Devise a strategy for filling in all of the missing values in the dataset.**
+
+I will use the mean for that 5-minute interval.  
+I first create an object called `is.missing` where I store the filling values to be used.  
+Note that mean for that 5-minute interval is rounded to the closest integer.
+```{r is.missing}
+is.missing <- interval.steps[,list(interval, meanSteps = as.integer(  round(meanSteps))  )]
+is.missing
+```
+
+
+* **Create a new dataset that is equal to the original dataset but with the missing data filled in.**
+
+The new data set is called `data1`.  
+It is a merge of `data` and `is.missing` objects by `interval` column.
+Here is the code:
+```{r data1}
+setkey(data, interval)
+setkey(is.missing, interval)
+data1 <- data[is.missing]
+```
+And this is how `data1` looks like:
+```{r}
+data1
+```
+Note the column at the right, `meanSteps`, which has the fillling values.  
+Now, I use these values to replace `NA` values at `steps` column.  
+`meanSteps` is deleted after that.
+```{r filling}
+data1[is.na(data1$steps), steps:= meanSteps]
+data1[,meanSteps:= NULL]
+```
+
+* **Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day.**
+
+Sum of steps are subset by `date` and storaged in an object called `daily.steps`  
+```{r daily.steps1}
+setkey(data1, date)
+daily.steps1 <- data1[,list( steps = sum(steps, na.rm = TRUE) ), by = date]
+```  
+  
+And here is the new histogram:  
+```{r daily.steps1 histogram}
+with(daily.steps1, 
+     plot(steps ~ date, type = "h", 
+          xlab = "date", ylab = "steps",
+          main = "Total number of steps taken each day (missing values replaced)")
+)
+```
+
+
+Here is the code for median and mean calculation:
+```{r daily.steps1 mean and median}
+daily.mean1 <- daily.steps1[,mean(steps)]
+daily.median1 <- daily.steps1[,median(steps)]
+```
+
+And here come the values:
+```{r}
+daily.mean1
+daily.median1
+```
+
+* **Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?**
+
+Yes they do. Both estimates have risen. 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+* **Create a new factor variable in the dataset with two levels -- "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.**
+
+An extra column is created in `data1` (`dateType`) where the day of the week is storaged (i.e. Mon, Tue...).
+```{r dayType}
+setkey(data1, date)
+data1[,dayType:= format(date, "%a")]
+setkey(data1, dayType)
+```
+
+Now we group weekdays into `Weekday` or `Weekend`.
+```{r}
+data1[dayType %in% c("Mon", "Tue", "Wed", "Thu", "Fri"), dayType:= "weekday"]
+data1[dayType %in% c("Sat", "Sun"), dayType:= "weekend"]
+```
+
+I checked that we have just these two levels:
+```{r}
+unique(data1$dayType)
+```
+* **Make a panel plot containing a time series plot (i.e. `type = "l"`) of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).**
+
+Sum of steps are now subset by `dayType` and `interval` and storaged in an object called `intervaldaytype`
+```{r intervaldaytype}
+setkey(data1, dayType, interval)
+intervaldaytype <- data1[,list( steps = mean(steps) ), by = "interval,dayType"]
+intervaldaytype
+```
+
+
+Now `intervaldaytype` is plot using `ggplot2`, using `dayType` as color label
+```{r dayType plot}
+library(ggplot2)
+plot <- qplot(interval, steps, data=intervaldaytype, color=dayType) + geom_line()
+plot <- plot + ggtitle("Average number of steps taken per interval (missing values replaced)")
+plot
+```
