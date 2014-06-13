@@ -1,6 +1,7 @@
 # Reproducible Research: Peer Assessment 1
 
 
+
 ## Loading and preprocessing the data
 Data is loaded using data.table package (it assumes it is already installed).
 I chose working with data.table because I find it quiet useful for subsetting and merging.
